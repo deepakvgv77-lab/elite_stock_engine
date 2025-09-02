@@ -5,6 +5,7 @@ from contextlib import contextmanager
 from loguru import logger
 from app.core.config import settings
 
+
 class DuckDBManager:
     def __init__(self):
         self.connection: Optional[duckdb.DuckDBPyConnection] = None
@@ -116,7 +117,9 @@ class DuckDBManager:
         """
 
         try:
-            self.connection.executescript(schema_sql)
+            statements = [stmt.strip() for stmt in schema_sql.strip().split(";") if stmt.strip()]
+            for statement in statements:
+                self.connection.execute(statement)
             logger.info("Database schema created successfully")
         except Exception as e:
             logger.error(f"Failed to create database schema: {e}")
@@ -164,6 +167,7 @@ class DuckDBManager:
 
 
 db_manager = DuckDBManager()
+
 
 def get_db():
     return db_manager
