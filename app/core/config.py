@@ -7,6 +7,8 @@ class Settings(BaseSettings):
     HOST: str = "0.0.0.0"
     PORT: int = 8000
     DATABASE_PATH: str = "data/elite_stock.db"
+    DATABASE_MEMORY: bool = False  # <--- Added this line
+
     AUTO_REFRESH_INTERVAL: int = 15
     MANUAL_REFRESH_ENABLED: bool = True
     DATA_STALENESS_THRESHOLD: int = 300
