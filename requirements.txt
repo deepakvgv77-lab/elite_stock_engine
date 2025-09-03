@@ -19,7 +19,7 @@ openlineage-python>=0.26.1
 pytest>=7.4.0
 pydantic-settings>=1.0.0
 
-# --- Auth stack fixes ---
+# --- Auth stack (final) ---
 # Required for OAuth2PasswordRequestForm (form-encoded credentials)
 python-multipart
 
