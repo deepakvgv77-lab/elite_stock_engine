@@ -7,6 +7,8 @@ import re
 from datetime import datetime
 from loguru import logger
 
+from tenacity import retry, stop_after_attempt, wait_exponential
+
 from app.data.fetchers.base_fetcher import BaseFetcher
 from app.core.config import settings, NSE_ENDPOINTS
 from app.core.models import Quote, Exchange, DataSource
@@ -50,7 +52,6 @@ class NSEFetcher(BaseFetcher):
         wait=wait_exponential(multiplier=1, min=4, max=10),
     )
     async def safe_fetch(self, fetch_func, *args, **kwargs):
-        # Inherit BaseFetcher.safe_fetch behavior
         return await super().safe_fetch(fetch_func, *args, **kwargs)
 
     async def fetch_market_status(self) -> Dict[str, Any]:
@@ -159,4 +160,3 @@ class NSEFetcher(BaseFetcher):
         """
         status = await self.fetch_market_status()
         return {"market_status_ok": bool(status)}
-
