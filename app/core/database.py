@@ -23,9 +23,14 @@ class DuckDBManager:
                 self.connection = duckdb.connect(":memory:")
                 logger.info("Connected to in-memory DuckDB database")
             else:
-                if not os.path.exists(self.database_path):
-                    open(self.database_path, 'a').close()
-                    logger.info(f"Created empty DuckDB file at {self.database_path}")
+                # ✅ Safety check: If file exists but is invalid, delete and recreate
+                if os.path.exists(self.database_path):
+                    try:
+                        test_conn = duckdb.connect(self.database_path)
+                        test_conn.close()
+                    except duckdb.IOException:
+                        logger.warning(f"Invalid DuckDB file detected at {self.database_path}. Deleting and recreating.")
+                        os.remove(self.database_path)
 
                 self.connection = duckdb.connect(self.database_path)
                 logger.info(f"Connected to DuckDB database at {self.database_path}")
@@ -163,4 +168,3 @@ class DuckDBManager:
 db_manager = DuckDBManager()
 
 def get_db() -> DuckDBManager:
-    return db_manager
