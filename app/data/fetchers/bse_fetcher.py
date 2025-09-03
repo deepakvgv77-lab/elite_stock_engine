@@ -3,13 +3,10 @@ import asyncio
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 from loguru import logger
-
 from tenacity import retry, stop_after_attempt, wait_exponential
-
-from app.data.fetchers.base import BaseFetcher
+from app.data.fetchers.base_fetcher import BaseFetcher
 from app.core.config import settings, BSE_ENDPOINTS
 from app.core.models import Quote, Exchange, DataSource
-
 
 class BSEFetcher(BaseFetcher):
     def __init__(self):
@@ -24,6 +21,7 @@ class BSEFetcher(BaseFetcher):
         url = f"{self.base_url}{BSE_ENDPOINTS['market_status']}"
         try:
             resp = await self.client.get(url)
+            resp.raise_for_status()
             ok = resp.status_code == 200
             logger.info(f"BSE connectivity test success: {ok}")
             return {"bse_connectivity": ok}
@@ -41,21 +39,16 @@ class BSEFetcher(BaseFetcher):
     async def fetch_stock_universe(self) -> List[Dict[str, Any]]:
         """
         Fetch full BSE universe from HTML master page.
-        Returns list of dicts with keys for stock metadata.
+        Returns list of dicts with stock metadata.
         """
         url = f"{self.base_url}{BSE_ENDPOINTS['sensex_data']}"
         try:
             resp = await self.safe_fetch(self.client.get, url)
             resp.raise_for_status()
             html = resp.text
-
-            # TODO: Implement actual HTML parsing per BSE's page.
-            # Example placeholder:
+            # TODO: Implement actual HTML parsing of BSE master list page.
             universe = []
-
-            # Example: parse HTML tables using BeautifulSoup (not shown)
-            # For now, just log and return empty list
-            logger.info("Fetched BSE universe (placeholder, parsing not implemented)")
+            logger.info("Fetched BSE universe (parsing not implemented, placeholder empty list)")
             return universe
         except Exception as e:
             logger.error(f"BSE universe fetch error: {e}")
@@ -63,28 +56,21 @@ class BSEFetcher(BaseFetcher):
 
     async def fetch_equity_quote(self, symbol: str) -> Optional[Quote]:
         """
-        Fetch live quote for an individual symbol.
-        Should be expanded with real parsing logic based on BSE page structure.
+        Fetch live quote for individual stock symbol.
+        Parsing of HTML response needed to extract actual values.
         """
         url = f"{self.base_url}{BSE_ENDPOINTS['equity_info']}{symbol}"
-
         try:
             resp = await self.safe_fetch(self.client.get, url)
             resp.raise_for_status()
             html = resp.text
-
-            # TODO: Parse `html` to extract quote info.
-            # Placeholder stub returning default values.
-            price = 0.0
-            change = 0.0
-            change_pct = 0.0
-
+            # TODO: Parse HTML to extract quote data.
             quote_data = {
                 "symbol": symbol,
                 "exchange": Exchange.BSE,
-                "price": price,
-                "change_amount": change,
-                "change_percent": change_pct,
+                "price": 0.0,
+                "change_amount": 0.0,
+                "change_percent": 0.0,
                 "volume": None,
                 "value": None,
                 "high": None,
@@ -96,30 +82,26 @@ class BSEFetcher(BaseFetcher):
             }
             return Quote(**quote_data)
         except Exception as e:
-            logger.error(f"Error fetching BSE quote for {symbol}: {e}")
+            logger.error(f"BSE quote fetch error for {symbol}: {e}")
             return None
 
     async def fetch_multiple_quotes(self, symbols: List[str]) -> List[Quote]:
         """
-        Concurrently fetch multiple symbol quotes.
+        Fetch multiple quotes concurrently with limited concurrency.
         """
         if not symbols:
             return []
         semaphore = asyncio.Semaphore(5)
-
-        async def fetch(sym: str) -> Optional[Quote]:
+        async def fetch(symbol: str) -> Optional[Quote]:
             async with semaphore:
-                await asyncio.sleep(0.1)  # to rate limit calls slightly
-                return await self.fetch_equity_quote(sym)
-
+                await asyncio.sleep(0.1)
+                return await self.fetch_equity_quote(symbol)
         results = await asyncio.gather(*(fetch(s) for s in symbols), return_exceptions=True)
-
-        quotes: List[Quote] = []
-        for res in results:
-            if isinstance(res, Quote):
-                quotes.append(res)
+        quotes = []
+        for result in results:
+            if isinstance(result, Quote):
+                quotes.append(result)
             else:
-                logger.error(f"BSE quote fetching error: {res}")
-
-        logger.info(f"Fetched {len(quotes)}/{len(symbols)} BSE quotes")
+                logger.error(f"Error fetching BSE quote: {result}")
+        logger.info(f"Fetched {len(quotes)} of {len(symbols)} BSE quotes")
         return quotes
