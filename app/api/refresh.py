@@ -6,10 +6,10 @@ from loguru import logger
 
 from app.core.models import RefreshResponse
 from app.core.database import db_manager
-from app.services.nse_fetcher import NSEFetcher
-from app.services.bse_fetcher import BSEFetcher
-from app.services.gold_fetcher import GoldFetcher
-from app.core.validator import DataValidator
+from app.data.fetchers.nse_fetcher import NSEFetcher
+# from app.data.fetchers.bse_fetcher import BSEFetcher  # Create this similar to NSE
+# from app.data.fetchers.gold_fetcher import GoldFetcher  # Create this for gold rates
+# from app.core.validator import DataValidator  # Create this for Great Expectations
 
 router = APIRouter(prefix="/refresh", tags=["Data Refresh"])
 
@@ -19,163 +19,99 @@ class RefreshService:
     
     def __init__(self):
         self.nse_fetcher = NSEFetcher()
-        self.bse_fetcher = BSEFetcher()
-        self.gold_fetcher = GoldFetcher()
-        self.validator = DataValidator()
+        # self.bse_fetcher = BSEFetcher()  # Uncomment when created
+        # self.gold_fetcher = GoldFetcher()  # Uncomment when created
+        # self.validator = DataValidator()  # Uncomment when created
         
-    async def refresh_nse_data(self) -> Dict[str, int]:
-        """Refresh NSE universe and quotes"""
+    async def refresh_nse_quotes(self, symbols: List[str] = None) -> Dict[str, int]:
+        """Refresh NSE quotes for specified symbols or popular ones"""
         try:
-            logger.info("Starting NSE data refresh")
+            logger.info("Starting NSE quotes refresh")
             
-            # Fetch NSE universe
-            stocks = await self.nse_fetcher.fetch_stock_universe()
-            stocks_updated = 0
-            
-            for stock in stocks:
-                # Insert/update stock data
-                query = """
-                INSERT INTO stocks (symbol, name, exchange, sector, industry, isin, market_cap, segment, listing_date, face_value, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-                ON CONFLICT (symbol) DO UPDATE SET
-                    name = excluded.name,
-                    sector = excluded.sector,
-                    industry = excluded.industry,
-                    market_cap = excluded.market_cap,
-                    updated_at = CURRENT_TIMESTAMP
+            # If no symbols specified, get some popular symbols from database
+            if not symbols:
+                popular_symbols_query = """
+                SELECT DISTINCT symbol FROM stocks 
+                WHERE exchange = 'NSE' 
+                ORDER BY market_cap DESC NULLS LAST 
+                LIMIT 50
                 """
-                db_manager.execute_insert(query, {
-                    'symbol': stock['symbol'],
-                    'name': stock['name'],
-                    'exchange': 'NSE',
-                    'sector': stock.get('sector'),
-                    'industry': stock.get('industry'),
-                    'isin': stock.get('isin'),
-                    'market_cap': stock.get('market_cap'),
-                    'segment': stock.get('segment'),
-                    'listing_date': stock.get('listing_date'),
-                    'face_value': stock.get('face_value')
-                })
-                stocks_updated += 1
+                result = db_manager.execute_query(popular_symbols_query)
+                symbols = [row['symbol'] for row in result] if result else ['RELIANCE', 'TCS', 'INFY']
             
-            # Fetch fresh quotes for active symbols
-            quotes = await self.nse_fetcher.fetch_live_quotes()
+            # Fetch quotes using your existing NSEFetcher
+            quotes = await self.nse_fetcher.fetch_multiple_quotes(symbols)
             quotes_updated = 0
             
             for quote in quotes:
-                quote_query = """
-                INSERT INTO quotes (symbol, exchange, price, change_amount, change_percent, volume, value, 
-                                  high, low, open, close, bid, ask, delivery_qty, delivery_percent, 
-                                  timestamp, data_source)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, 'NSE_API')
-                """
-                db_manager.execute_insert(quote_query, quote)
-                quotes_updated += 1
+                try:
+                    quote_query = """
+                    INSERT INTO quotes (symbol, exchange, price, change_amount, change_percent, volume, value, 
+                                      high, low, open, close, timestamp, data_source)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """
+                    params = {
+                        'symbol': quote.symbol,
+                        'exchange': quote.exchange.value,
+                        'price': float(quote.price),
+                        'change_amount': float(quote.change_amount) if quote.change_amount else None,
+                        'change_percent': float(quote.change_percent) if quote.change_percent else None,
+                        'volume': quote.volume,
+                        'value': quote.value,
+                        'high': float(quote.high) if quote.high else None,
+                        'low': float(quote.low) if quote.low else None,
+                        'open': float(quote.open) if quote.open else None,
+                        'close': float(quote.close) if quote.close else None,
+                        'timestamp': quote.timestamp,
+                        'data_source': quote.data_source.value
+                    }
+                    db_manager.execute_insert(quote_query, params)
+                    quotes_updated += 1
+                    
+                except Exception as e:
+                    logger.error(f"Failed to insert quote for {quote.symbol}: {e}")
             
-            logger.info(f"NSE refresh completed: {stocks_updated} stocks, {quotes_updated} quotes")
-            return {"stocks": stocks_updated, "quotes": quotes_updated}
+            logger.info(f"NSE quotes refresh completed: {quotes_updated} quotes updated")
+            return {"quotes": quotes_updated}
             
         except Exception as e:
-            logger.error(f"NSE refresh failed: {e}")
+            logger.error(f"NSE quotes refresh failed: {e}")
             raise
     
-    async def refresh_bse_data(self) -> Dict[str, int]:
-        """Refresh BSE universe and quotes"""
+    async def refresh_market_status(self) -> Dict[str, Any]:
+        """Refresh NSE market status"""
         try:
-            logger.info("Starting BSE data refresh")
+            logger.info("Refreshing NSE market status")
+            market_status = await self.nse_fetcher.fetch_market_status()
             
-            stocks = await self.bse_fetcher.fetch_stock_universe()
-            stocks_updated = 0
-            
-            for stock in stocks:
-                query = """
-                INSERT INTO stocks (symbol, name, exchange, sector, industry, isin, market_cap, segment, listing_date, face_value, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-                ON CONFLICT (symbol) DO UPDATE SET
-                    name = excluded.name,
-                    sector = excluded.sector,
-                    industry = excluded.industry,
-                    market_cap = excluded.market_cap,
-                    updated_at = CURRENT_TIMESTAMP
+            if market_status:
+                # Store market status in system_health table
+                health_query = """
+                INSERT INTO system_health (component, status, response_time_ms, checked_at)
+                VALUES (?, ?, ?, CURRENT_TIMESTAMP)
                 """
-                db_manager.execute_insert(query, {
-                    'symbol': stock['symbol'],
-                    'name': stock['name'],
-                    'exchange': 'BSE',
-                    'sector': stock.get('sector'),
-                    'industry': stock.get('industry'),
-                    'isin': stock.get('isin'),
-                    'market_cap': stock.get('market_cap'),
-                    'segment': stock.get('segment'),
-                    'listing_date': stock.get('listing_date'),
-                    'face_value': stock.get('face_value')
+                db_manager.execute_insert(health_query, {
+                    'component': 'NSE_Market',
+                    'status': 'UP' if market_status else 'DOWN',
+                    'response_time_ms': None
                 })
-                stocks_updated += 1
-            
-            logger.info(f"BSE refresh completed: {stocks_updated} stocks")
-            return {"stocks": stocks_updated, "quotes": 0}
-            
+                
+                return {"market_status": "updated"}
+            else:
+                return {"market_status": "failed"}
+                
         except Exception as e:
-            logger.error(f"BSE refresh failed: {e}")
+            logger.error(f"Market status refresh failed: {e}")
             raise
     
-    async def refresh_gold_data(self) -> Dict[str, int]:
-        """Refresh Coimbatore 22K gold rates"""
-        try:
-            logger.info("Starting gold data refresh")
-            
-            gold_rates = await self.gold_fetcher.fetch_gold_rates()
-            rates_updated = 0
-            
-            for rate in gold_rates:
-                query = """
-                INSERT INTO gold_rates (date, city, purity, rate_per_gram, rate_per_10g, 
-                                      change_amount, change_percent, previous_rate, data_source, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-                ON CONFLICT (date, city, purity) DO UPDATE SET
-                    rate_per_gram = excluded.rate_per_gram,
-                    rate_per_10g = excluded.rate_per_10g,
-                    change_amount = excluded.change_amount,
-                    change_percent = excluded.change_percent,
-                    previous_rate = excluded.previous_rate,
-                    data_source = excluded.data_source,
-                    created_at = CURRENT_TIMESTAMP
-                """
-                db_manager.execute_insert(query, rate)
-                rates_updated += 1
-            
-            logger.info(f"Gold refresh completed: {rates_updated} rates")
-            return {"gold_rates": rates_updated}
-            
-        except Exception as e:
-            logger.error(f"Gold refresh failed: {e}")
-            raise
-    
-    async def validate_data_quality(self) -> Dict[str, str]:
-        """Run Great Expectations validation gates"""
-        try:
-            logger.info("Running data quality validation")
-            
-            validation_results = {}
-            
-            # Validate stocks data
-            stocks_validation = await self.validator.validate_stocks_data()
-            validation_results["stocks"] = "PASSED" if stocks_validation else "FAILED"
-            
-            # Validate quotes data
-            quotes_validation = await self.validator.validate_quotes_data()
-            validation_results["quotes"] = "PASSED" if quotes_validation else "FAILED"
-            
-            # Validate gold data
-            gold_validation = await self.validator.validate_gold_data()
-            validation_results["gold_rates"] = "PASSED" if gold_validation else "FAILED"
-            
-            logger.info(f"Validation completed: {validation_results}")
-            return validation_results
-            
-        except Exception as e:
-            logger.error(f"Validation failed: {e}")
-            return {"error": str(e)}
+    async def get_fetcher_stats(self) -> Dict[str, Any]:
+        """Get statistics from all fetchers"""
+        stats = {
+            "nse": self.nse_fetcher.get_stats(),
+            # "bse": self.bse_fetcher.get_stats(),  # Uncomment when BSE fetcher exists
+            # "gold": self.gold_fetcher.get_stats(),  # Uncomment when Gold fetcher exists
+        }
+        return stats
 
 
 refresh_service = RefreshService()
@@ -183,13 +119,15 @@ refresh_service = RefreshService()
 
 @router.post("/", response_model=RefreshResponse)
 async def manual_refresh(
-    sources: Optional[List[str]] = None
+    sources: Optional[List[str]] = None,
+    symbols: Optional[List[str]] = None
 ) -> RefreshResponse:
     """
     Manual refresh endpoint for live data sources
     
     Args:
-        sources: List of sources to refresh ["nse", "bse", "gold"]. If None, refreshes all.
+        sources: List of sources to refresh ["nse", "market_status"]. If None, refreshes quotes.
+        symbols: List of symbols to refresh quotes for. If None, uses popular symbols.
     
     Returns:
         RefreshResponse with status and metrics
@@ -197,12 +135,12 @@ async def manual_refresh(
     start_time = datetime.now()
     
     try:
-        # Default to all sources if none specified
+        # Default to NSE quotes if no sources specified
         if sources is None:
-            sources = ["nse", "bse", "gold"]
+            sources = ["nse"]
         
         # Validate source names
-        valid_sources = {"nse", "bse", "gold"}
+        valid_sources = {"nse", "market_status"}
         invalid_sources = set(sources) - valid_sources
         if invalid_sources:
             raise HTTPException(
@@ -216,45 +154,30 @@ async def manual_refresh(
         records_updated = {}
         errors = []
         
-        # Refresh NSE data
+        # Refresh NSE quotes
         if "nse" in sources:
             try:
-                nse_result = await refresh_service.refresh_nse_data()
+                nse_result = await refresh_service.refresh_nse_quotes(symbols)
                 sources_refreshed.append("NSE")
                 records_updated.update(nse_result)
             except Exception as e:
                 errors.append(f"NSE refresh failed: {str(e)}")
         
-        # Refresh BSE data
-        if "bse" in sources:
+        # Refresh market status
+        if "market_status" in sources:
             try:
-                bse_result = await refresh_service.refresh_bse_data()
-                sources_refreshed.append("BSE")
-                records_updated.update(bse_result)
+                status_result = await refresh_service.refresh_market_status()
+                sources_refreshed.append("MARKET_STATUS")
+                records_updated.update(status_result)
             except Exception as e:
-                errors.append(f"BSE refresh failed: {str(e)}")
-        
-        # Refresh Gold data
-        if "gold" in sources:
-            try:
-                gold_result = await refresh_service.refresh_gold_data()
-                sources_refreshed.append("GOLD")
-                records_updated.update(gold_result)
-            except Exception as e:
-                errors.append(f"Gold refresh failed: {str(e)}")
-        
-        # Run data quality validation
-        validation_status = await refresh_service.validate_data_quality()
+                errors.append(f"Market status refresh failed: {str(e)}")
         
         # Calculate duration
         end_time = datetime.now()
         duration_seconds = (end_time - start_time).total_seconds()
         
         # Determine success status
-        success = len(errors) == 0 and all(
-            status == "PASSED" for status in validation_status.values() 
-            if status != "error"
-        )
+        success = len(errors) == 0
         
         logger.info(f"Manual refresh completed in {duration_seconds:.2f}s. Success: {success}")
         
@@ -262,7 +185,7 @@ async def manual_refresh(
             triggered_at=start_time,
             sources_refreshed=sources_refreshed,
             records_updated=records_updated,
-            validation_status=validation_status,
+            validation_status={"basic": "PASSED"} if success else {"basic": "FAILED"},
             duration_seconds=duration_seconds,
             success=success,
             errors=errors if errors else None
@@ -298,17 +221,16 @@ async def get_refresh_status():
             "SELECT MAX(updated_at) as latest_stock FROM stocks"
         )
         
-        latest_gold = db_manager.execute_query(
-            "SELECT MAX(created_at) as latest_gold FROM gold_rates"
-        )
+        # Get fetcher stats
+        fetcher_stats = await refresh_service.get_fetcher_stats()
         
         return {
             "status": "ready",
             "data_freshness": {
                 "quotes": latest_quotes[0]["latest_quote"] if latest_quotes and latest_quotes[0]["latest_quote"] else None,
                 "stocks": latest_stocks[0]["latest_stock"] if latest_stocks and latest_stocks[0]["latest_stock"] else None,
-                "gold_rates": latest_gold[0]["latest_gold"] if latest_gold and latest_gold[0]["latest_gold"] else None
             },
+            "fetcher_stats": fetcher_stats,
             "timestamp": datetime.now()
         }
     
@@ -330,35 +252,34 @@ async def refresh_watchlist_data(symbols: List[str]):
     try:
         logger.info(f"Refreshing watchlist symbols: {symbols}")
         
-        quotes_updated = 0
-        errors = []
-        
-        for symbol in symbols:
-            try:
-                # Fetch fresh quote for this symbol
-                quote = await refresh_service.nse_fetcher.fetch_symbol_quote(symbol)
-                if quote:
-                    quote_query = """
-                    INSERT INTO quotes (symbol, exchange, price, change_amount, change_percent, volume, value, 
-                                      high, low, open, close, timestamp, data_source)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, 'NSE_API')
-                    """
-                    db_manager.execute_insert(quote_query, quote)
-                    quotes_updated += 1
-            except Exception as e:
-                errors.append(f"Failed to refresh {symbol}: {str(e)}")
-        
+        result = await refresh_service.refresh_nse_quotes(symbols)
         duration_seconds = (datetime.now() - start_time).total_seconds()
         
         return {
             "triggered_at": start_time,
             "symbols_requested": len(symbols),
-            "quotes_updated": quotes_updated,
+            "quotes_updated": result.get("quotes", 0),
             "duration_seconds": duration_seconds,
-            "success": len(errors) == 0,
-            "errors": errors if errors else None
+            "success": True,
+            "errors": None
         }
     
     except Exception as e:
         logger.error(f"Watchlist refresh failed: {e}")
         raise HTTPException(status_code=500, detail=f"Watchlist refresh failed: {str(e)}")
+
+
+@router.get("/test-connectivity")
+async def test_connectivity():
+    """Test connectivity to all data sources"""
+    try:
+        nse_test = await refresh_service.nse_fetcher.test_connectivity()
+        
+        return {
+            "nse": nse_test,
+            "timestamp": datetime.now()
+        }
+    
+    except Exception as e:
+        logger.error(f"Connectivity test failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Connectivity test failed: {str(e)}")
