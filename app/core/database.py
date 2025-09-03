@@ -5,7 +5,6 @@ from contextlib import contextmanager
 from loguru import logger
 from app.core.config import settings
 
-
 class DuckDBManager:
     def __init__(self):
         self.connection: Optional[duckdb.DuckDBPyConnection] = None
@@ -21,7 +20,6 @@ class DuckDBManager:
             else:
                 self.connection = duckdb.connect(self.database_path)
                 logger.info(f"Connected to DuckDB database at {self.database_path}")
-
             self._create_schema()
         except Exception as e:
             logger.error(f"Failed to initialize database: {e}")
@@ -43,9 +41,8 @@ class DuckDBManager:
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
-
         CREATE TABLE IF NOT EXISTS quotes (
-            id BIGSERIAL PRIMARY KEY,
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
             symbol VARCHAR NOT NULL,
             exchange VARCHAR NOT NULL,
             price DECIMAL(10,2) NOT NULL,
@@ -65,9 +62,8 @@ class DuckDBManager:
             data_source VARCHAR DEFAULT 'API',
             FOREIGN KEY (symbol) REFERENCES stocks(symbol)
         );
-
         CREATE TABLE IF NOT EXISTS gold_rates (
-            id BIGSERIAL PRIMARY KEY,
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
             date DATE NOT NULL,
             city VARCHAR NOT NULL DEFAULT 'Coimbatore',
             purity VARCHAR NOT NULL DEFAULT '22K',
@@ -80,34 +76,30 @@ class DuckDBManager:
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             UNIQUE(date, city, purity)
         );
-
         CREATE TABLE IF NOT EXISTS data_quality_log (
-            id BIGSERIAL PRIMARY KEY,
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
             source VARCHAR NOT NULL,
             check_type VARCHAR NOT NULL,
             status VARCHAR NOT NULL,
             details JSON,
             checked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
-
         CREATE TABLE IF NOT EXISTS system_health (
-            id BIGSERIAL PRIMARY KEY,
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
             component VARCHAR NOT NULL,
             status VARCHAR NOT NULL,
             response_time_ms INTEGER,
             error_message TEXT,
             checked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
-
         CREATE TABLE IF NOT EXISTS watchlist (
-            id BIGSERIAL PRIMARY KEY,
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id VARCHAR,
             symbol VARCHAR NOT NULL,
             added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             notes TEXT,
             FOREIGN KEY (symbol) REFERENCES stocks(symbol)
         );
-
         CREATE INDEX IF NOT EXISTS idx_quotes_symbol_timestamp ON quotes(symbol, timestamp DESC);
         CREATE INDEX IF NOT EXISTS idx_quotes_timestamp ON quotes(timestamp DESC);
         CREATE INDEX IF NOT EXISTS idx_stocks_exchange ON stocks(exchange);
@@ -115,7 +107,6 @@ class DuckDBManager:
         CREATE INDEX IF NOT EXISTS idx_gold_rates_date ON gold_rates(date DESC);
         CREATE INDEX IF NOT EXISTS idx_data_quality_checked_at ON data_quality_log(checked_at DESC);
         """
-
         try:
             statements = [stmt.strip() for stmt in schema_sql.strip().split(";") if stmt.strip()]
             for statement in statements:
@@ -140,10 +131,8 @@ class DuckDBManager:
                     result = conn.execute(query, params).fetchall()
                 else:
                     result = conn.execute(query).fetchall()
-
                 columns = [desc[0] for desc in conn.description] if conn.description else []
                 return [dict(zip(columns, row)) for row in result]
-
         except Exception as e:
             logger.error(f"Query execution failed: {query[:100]}... Error: {e}")
             raise
@@ -165,9 +154,7 @@ class DuckDBManager:
             self.connection.close()
             logger.info("Database connection closed")
 
-
 db_manager = DuckDBManager()
-
 
 def get_db():
     return db_manager
