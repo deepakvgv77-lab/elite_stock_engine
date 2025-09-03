@@ -4,22 +4,32 @@ from typing import Optional, Dict, Any, List
 from contextlib import contextmanager
 from loguru import logger
 from app.core.config import settings
+import atexit
+
 
 class DuckDBManager:
     def __init__(self):
         self.connection: Optional[duckdb.DuckDBPyConnection] = None
         self.database_path = settings.DATABASE_PATH
         self._initialize_database()
+        atexit.register(self.close)
 
     def _initialize_database(self):
         try:
             os.makedirs(os.path.dirname(self.database_path), exist_ok=True)
+            logger.debug(f"Database path resolved to: {self.database_path}")
+
             if settings.DATABASE_MEMORY:
                 self.connection = duckdb.connect(":memory:")
                 logger.info("Connected to in-memory DuckDB database")
             else:
+                if not os.path.exists(self.database_path):
+                    open(self.database_path, 'a').close()
+                    logger.info(f"Created empty DuckDB file at {self.database_path}")
+
                 self.connection = duckdb.connect(self.database_path)
                 logger.info(f"Connected to DuckDB database at {self.database_path}")
+
             self._create_schema()
         except Exception as e:
             logger.error(f"Failed to initialize database: {e}")
@@ -127,12 +137,10 @@ class DuckDBManager:
     def execute_query(self, query: str, params: Optional[Dict] = None) -> List[Dict[str, Any]]:
         try:
             with self.get_connection() as conn:
-                if params:
-                    result = conn.execute(query, params).fetchall()
-                else:
-                    result = conn.execute(query).fetchall()
-                columns = [desc[0] for desc in conn.description] if conn.description else []
-                return [dict(zip(columns, row)) for row in result]
+                result = conn.execute(query, params) if params else conn.execute(query)
+                columns = [desc[0] for desc in result.description]
+                rows = result.fetchall()
+                return [dict(zip(columns, row)) for row in rows]
         except Exception as e:
             logger.error(f"Query execution failed: {query[:100]}... Error: {e}")
             raise
@@ -140,10 +148,7 @@ class DuckDBManager:
     def execute_insert(self, query: str, params: Optional[Dict] = None) -> int:
         try:
             with self.get_connection() as conn:
-                if params:
-                    result = conn.execute(query, params)
-                else:
-                    result = conn.execute(query)
+                result = conn.execute(query, params) if params else conn.execute(query)
                 return result.rowcount
         except Exception as e:
             logger.error(f"Insert execution failed: {query[:100]}... Error: {e}")
@@ -154,7 +159,8 @@ class DuckDBManager:
             self.connection.close()
             logger.info("Database connection closed")
 
+
 db_manager = DuckDBManager()
 
-def get_db():
+def get_db() -> DuckDBManager:
     return db_manager
