@@ -42,7 +42,7 @@ class DuckDBManager:
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
         CREATE TABLE IF NOT EXISTS quotes (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id INTEGER PRIMARY KEY,
             symbol VARCHAR NOT NULL,
             exchange VARCHAR NOT NULL,
             price DECIMAL(10,2) NOT NULL,
@@ -63,7 +63,7 @@ class DuckDBManager:
             FOREIGN KEY (symbol) REFERENCES stocks(symbol)
         );
         CREATE TABLE IF NOT EXISTS gold_rates (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id INTEGER PRIMARY KEY,
             date DATE NOT NULL,
             city VARCHAR NOT NULL DEFAULT 'Coimbatore',
             purity VARCHAR NOT NULL DEFAULT '22K',
@@ -77,7 +77,7 @@ class DuckDBManager:
             UNIQUE(date, city, purity)
         );
         CREATE TABLE IF NOT EXISTS data_quality_log (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id INTEGER PRIMARY KEY,
             source VARCHAR NOT NULL,
             check_type VARCHAR NOT NULL,
             status VARCHAR NOT NULL,
@@ -85,7 +85,7 @@ class DuckDBManager:
             checked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
         CREATE TABLE IF NOT EXISTS system_health (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id INTEGER PRIMARY KEY,
             component VARCHAR NOT NULL,
             status VARCHAR NOT NULL,
             response_time_ms INTEGER,
@@ -93,7 +93,7 @@ class DuckDBManager:
             checked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
         CREATE TABLE IF NOT EXISTS watchlist (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id INTEGER PRIMARY KEY,
             user_id VARCHAR,
             symbol VARCHAR NOT NULL,
             added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
