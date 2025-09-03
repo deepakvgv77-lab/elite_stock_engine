@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from app.api import quotes, universe, gold, health, refresh
 from app.tasks.scheduler import start_scheduler
 from app.utils.logger import setup_logging
+from app.core.database import db_manager
 
 # Feature routers (clear aliases to avoid collisions)
 from app.api.ultra_elite import router as ultra_router
@@ -72,3 +73,4 @@ async def startup_event():
 
 if __name__ == "__main__":
     uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
+
