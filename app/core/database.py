@@ -23,7 +23,7 @@ class DuckDBManager:
                 self.connection = duckdb.connect(":memory:")
                 logger.info("Connected to in-memory DuckDB database")
             else:
-                # ✅ Safety check: If file exists but is invalid, delete and recreate
+                # Safety check: If file exists but is invalid, delete and recreate
                 if os.path.exists(self.database_path):
                     try:
                         test_conn = duckdb.connect(self.database_path)
@@ -168,3 +168,4 @@ class DuckDBManager:
 db_manager = DuckDBManager()
 
 def get_db() -> DuckDBManager:
+    return db_manager
