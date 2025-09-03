@@ -35,7 +35,7 @@ class StockBase(BaseModel):
     exchange: Exchange
     sector: Optional[str] = Field(None, max_length=100)
     industry: Optional[str] = Field(None, max_length=100)
-    isin: Optional[str] = Field(None, regex=r"^[A-Z]{2}[A-Z0-9]{9}[0-9]$")
+    isin: Optional[str] = Field(None, pattern=r"^[A-Z]{2}[A-Z0-9]{9}[0-9]$")  # changed regex->pattern
 
 class Stock(StockBase, TimestampedModel):
     market_cap: Optional[int] = Field(None, ge=0)
@@ -98,7 +98,7 @@ class DataQualityCheck(BaseModel):
     id: Optional[int] = None
     source: str = Field(..., max_length=50)
     check_type: str = Field(..., max_length=50)
-    status: str = Field(..., regex=r"^(PASSED|FAILED)$")
+    status: str = Field(..., pattern=r"^(PASSED|FAILED)$")  # changed regex->pattern
     details: Optional[Dict[str, Any]] = None
     checked_at: Optional[datetime] = None
 
