@@ -1,4 +1,8 @@
 # app/main.py
+
+from dotenv import load_dotenv
+load_dotenv()  # Load environment variables from .env before anything else
+
 import uvicorn
 from fastapi import FastAPI
 
@@ -25,7 +29,7 @@ from app.api.backtest import router as backtest_router
 from app.api.governance import router as governance_router
 from app.api.ui import router as ui_router
 from app.api.security import router as security_router
-from app.api.admin import router as admin_router          # <-- NEW: Admin-only router
+from app.api.admin import router as admin_router            # <-- NEW: Admin-only router
 from app.api.lineage import router as lineage_router
 from app.api.compliance import router as compliance_router
 
@@ -67,10 +71,11 @@ app.include_router(admin_router,          prefix="/api/v6/admin",       tags=["A
 app.include_router(lineage_router,        prefix="/api/v6/lineage",     tags=["Lineage"])
 app.include_router(compliance_router,     prefix="/api/v6/compliance",  tags=["Compliance"])
 
+
 @app.on_event("startup")
 async def startup_event():
     start_scheduler()
 
+
 if __name__ == "__main__":
     uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
-
